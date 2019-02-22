@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+
+	<head>
+		<meta charset="UTF-8">
+		<title>js异常测试</title>
+		<style type="text/css">
+			.send-beacon {
+				width: 100px;
+				height: 34px;
+				margin: 20px;
+				cursor: pointer;
+				text-align: center;
+				line-height: 34px;
+				background-color: salmon;
+				color: #fff;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div class="send-beacon">点击我发送sendBeacon</div>
+		<a href="www.baidu.com">点击我就要跳转，测试是否发送请求</a>
+		<div class="send-beacon make-error">点击我就出错</div>
+		<script type="text/javascript">
+			// 点击发送sendBeacon
+			beaconBtn = document.getElementsByClassName('send-beacon')[0];
+			beaconBtn.onclick = function() {
+				navigator.sendBeacon("http://localhost:3000/testApi", {
+					sex: '女'
+				});
+			}
+			// ajax兼容版
+			function ajaxFunc(method, url, data, flag) {
+				var xhr = null;
+				if(window.XMLHttpRequest) {
+					xhr = new XMLHttpRequest();
+				} else if(window.ActiveXObject) {
+					//兼容IE浏览器
+					xhr = new ActiveXObject("Microsoft.XMLHttp");
+				}
+				//防止请求方式输入小写
+				method = method.toUpperCase();
+				if(method == "GET") {
+					//初始化
+					xhr.open(method, url + "?" + data, flag);
+					//发送请求
+					xhr.send();
+				} else if(method == "POST") {
+					xhr.open(method, url, flag);
+					xhr.send(data);
+				}
+			}
+
+			// 使用sendBeacon来测试是否发送
+			// 刷新、关闭、跳转都可以发送请求，后台也拿到数据
+			window.addEventListener('unload', logData, false);
+
+			function logData() {
+				var data = JSON.stringify({
+					sex: '女'
+				});
+				var errorJson = JSON.stringify(allError)
+				// 向下兼容性写法
+				if(navigator.sendBeacon) {
+					navigator.sendBeacon("http://localhost:3000/testApi", errorJson);
+				} else {
+					ajaxFunc('post', 'http://localhost:3000/testApi', errorJson, true)
+					/*if(XMLHttpRequest) {
+						var xhr = new XMLHttpRequest();
+						xhr.open('post', 'http://localhost:3000/testApi', true); // 上报给node中间层处理
+						xhr.send(errorJson); // 发送参数
+					}*/
+				}
+			}
+
+			// 手动出错函数
+			var allError = '';
+			var makeError = document.getElementsByClassName('make-error')[0];
+			makeError.onclick = function() {
+				throw new Error("エラー");
+			}
+
+			// 错误信息采集函数
+			window.onerror = function(msg, url, line, col, error) {
+				//没有URL不上报！上报也不知道错误，Script error应该属于跨域原因
+				if(msg != "Script error." && !url) {
+					return true;
+				}
+				//采用异步的方式
+				//我遇到过在window.onunload进行ajax的堵塞上报
+				//由于客户端强制关闭webview导致这次堵塞上报有Network Error
+				//我猜测这里window.onerror的执行流在关闭前是必然执行的
+				//而离开文章之后的上报对于业务来说是可丢失的
+				//所以我把这里的执行流放到异步事件去执行
+				//脚本的异常数降低了10倍
+				setTimeout(function() {
+					var data = {};
+					//不一定所有浏览器都支持col参数
+					col = col || (window.event && window.event.errorCharacter) || 0;
+					data.url = url;
+					data.line = line;
+					data.col = col;
+					// 添加浏览器信息
+					data.userAgent = window.navigator.userAgent;
+					if(!!error && !!error.stack) {
+						//如果浏览器有堆栈信息
+						//直接使用
+						data.msg = error.stack.toString();
+					} else if(!!arguments.callee) {
+						//尝试通过callee拿堆栈信息
+						var ext = [];
+						var f = arguments.callee.caller,
+							c = 3;
+						//这里只拿三层堆栈信息
+						while(f && (--c > 0)) {
+							ext.push(f.toString());
+							if(f === f.caller) {
+								break; //如果有环
+							}
+							f = f.caller;
+						}
+						ext = ext.join(",");
+						data.msg = ext;
+					}
+					//把data上报到后台！===这里进行请求
+					allError = data;
+					console.log(data)
+				}, 0);
+				return true;
+			};
+		</script>
+	</body>
+
+</html>
