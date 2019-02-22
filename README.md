@@ -19,3 +19,5 @@ sendBeacon异常上报
 4、后台接收参数的时候，需要使用流的方式进行接受，否则无法接收成功 
 
 
+启动方式：
+打开node-server里面的myapp文件夹，打开cmd，输入npm start即可运行node后台，进行数据的接受
